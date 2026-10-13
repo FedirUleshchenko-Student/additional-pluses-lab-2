@@ -31,11 +31,12 @@ void fillTestFile(size_t as, size_t bs, dataT mn, dataT mx, std::ostream& os) {
 	os.flush();
 }
 
-void createTestBlock(size_t testFilesCnt, std::string namePrefix,
-	size_t mnsiz, size_t mxsiz, dataT mnval, dataT mxval, std::filesystem::path dir) {
+void createTestBlock(size_t testFilesCnt, string namePrefix,
+	size_t mnsiz, size_t mxsiz, dataT mnval, dataT mxval, filesystem::path indir) {
+	filesystem::path dir = filesystem::path("input") / indir;
 
 	if (!filesystem::is_directory(dir))
-		filesystem::create_directory(dir);
+		filesystem::create_directories(dir);
 
 	uniform_int_distribution<dataT> rand(mnsiz, mxsiz);
 

@@ -14,10 +14,13 @@ using namespace std;
 int main()
 {
     try {
-        //createTestBlock(250, "", 1, 1000, 1, 1000);
+        //createTestBlock(50, "", 1e7, 1e7, 1, 1e10, "n = 1e7");
+        //cout << "tests created" << endl;
+
 
         auto t1 = chrono::steady_clock::now();
-        cout << testAllTestsInDirectory() << endl;
+        auto ans = testAllTestsInDirectory("n = 1e7", 20, cout);
+        cout << ans.getTestBlock("TOTALE") << endl;
         auto t2 = chrono::steady_clock::now();
         cout << scientific << chrono::duration<long double, milli>(t2 - t1) << endl;
     }
