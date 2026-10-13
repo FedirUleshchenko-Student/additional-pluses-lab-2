@@ -7,6 +7,7 @@
 #include <thread>
 #include "global-consts.h"
 
+#include <utility>
 #include <iostream>
 
 
@@ -171,35 +172,37 @@ void mergeOwn(vector<dataT>& a, vector<dataT>& b, vector<dataT>& c, size_t threa
 	size_t bBlkSiz = b.size() / threads + (b.size() % threads != 0);
 
 	vector<pair<size_t, size_t>> blockLimits(threads);
-	for (size_t i = 0; i < threads; i++)
-		blockLimits[i] = { i * (aBlkSiz + bBlkSiz) , (i + 1) * (aBlkSiz + bBlkSiz) };
-	blockLimits[threads - 1].second = min(blockLimits[threads - 1].second, c.size());
 
 	for (size_t i = 0; i < threads; i++) {
+		size_t a_start = min(i * aBlkSiz, a.size());
+		size_t a_end = min((i + 1) * aBlkSiz, a.size());
+		size_t b_start = min(i * bBlkSiz, b.size());
+		size_t b_end = min((i + 1) * bBlkSiz, b.size());
+
+		blockLimits[i] = { a_start + b_start, a_end + b_end };
+
 		tr[i] = jthread(
 			[&, i]() { merge(
-				a.begin() + i * aBlkSiz,
-				a.begin() + ((i + 1 == threads) ? a.size() : ((i + 1) * aBlkSiz)),
-				b.begin() + i * bBlkSiz,
-				b.begin() + ((i + 1 == threads) ? b.size() : ((i + 1) * bBlkSiz)),
-				c.begin() + blockLimits[i].first); });
+					a.begin() + a_start, a.begin() + a_end,
+					b.begin() + b_start, b.begin() + b_end,
+					c.begin() + blockLimits[i].first); });
 	}
 
 	tr.clear();
 
 	vector<dataT> temp(a.size() + b.size());
 
-	vector<dataT>& fromP = c;
-	vector<dataT>& toP = temp;
+	vector<dataT>* fromP = &c;
+	vector<dataT>* toP = &temp;
 	size_t lastsiz;
 	bool startOffset;
 	while (blockLimits.size() > 1) {
 		lastsiz = 0;
 		startOffset = blockLimits.size() % 2;
 		for (size_t i = 0; i < blockLimits.size() - startOffset; i++) {
-			merge(fromP.begin() + blockLimits[i].first, fromP.begin() + blockLimits[i].second,
-				fromP.begin() + blockLimits[i + 1].first, fromP.begin() + blockLimits[i + 1].second,
-				toP.begin() + lastsiz
+			merge(fromP->begin() + blockLimits[i].first, fromP->begin() + blockLimits[i].second,
+				fromP->begin() + blockLimits[i + 1].first, fromP->begin() + blockLimits[i + 1].second,
+				toP->begin() + lastsiz
 			);
 
 			blockLimits[i].second = blockLimits[i + 1].second;
@@ -208,16 +211,12 @@ void mergeOwn(vector<dataT>& a, vector<dataT>& b, vector<dataT>& c, size_t threa
 		}
 
 		if (startOffset)
-			copy(fromP.begin() + blockLimits.back().first,
-				fromP.begin() + blockLimits.back().second,
-				toP.begin() + lastsiz);
+			copy(fromP->begin() + blockLimits.back().first,
+				fromP->begin() + blockLimits.back().second,
+				toP->begin() + lastsiz);
 
 		swap(fromP, toP);
 	}
 
-	if (&fromP != &c)
-		swap(temp, c);
-
-	//if(!c.empty())
-	//	c.pop_back();
+	if (fromP != &c) c = move(temp);
 }
