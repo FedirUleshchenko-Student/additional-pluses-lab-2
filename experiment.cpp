@@ -159,22 +159,22 @@ timeData testAllTestsInDirectory(filesystem::path indir, size_t testCnt,
 	return ans;
 }
 
-vector<timeData> testAllTestsInDirectories(filesystem::path dir, size_t testCnt,
+map<string, timeData> testAllTestsInDirectories(filesystem::path dir, size_t testCnt,
 	optional<reference_wrapper<ostream>> os) {
 	if (!filesystem::is_directory(dir) || filesystem::is_empty(dir))
 		throw runtime_error("cannot open the input directory");
 
-	vector<timeData> ans;
+	map<string, timeData> ans;
 	timeData t;
 
 	for (const auto x : filesystem::recursive_directory_iterator(dir)) {
 		if (!filesystem::is_directory(x)) continue;
 
-		t = testAllTestsInDirectory(x.path().filename().string(), testCnt);
-		ans.push_back(t);
+		t = testAllTestsInDirectory(x.path().filename().string(), testCnt, os);
+		ans.emplace(x.path().filename().string(), t);
 
 		if (os.has_value())
-			os.value().get() << t.getTestBlock("DIRECTORY : " + x.path().filename().string());
+			os.value().get() << t.getTestBlock("DIRECTORY : " + x.path().filename().string()) << "\n\n";
 	}
 	return ans;
 }

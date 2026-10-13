@@ -4,6 +4,7 @@
 #include <functional>
 #include <utility>
 #include <ostream>
+#include <map>
 
 #include "global-consts.h"
 
@@ -40,7 +41,7 @@ timeData measureSingleTestOnce(std::vector<dataT>& a, std::vector<dataT>& b);
 
 timeData testAllTestsInDirectory(std::filesystem::path indir = "", size_t testCnt = 1,
 	std::optional<std::reference_wrapper<std::ostream>> os = std::nullopt);
-std::vector<timeData> testAllTestsInDirectories(std::filesystem::path dir = "input", size_t testCnt = 1,
+std::map <std::string, timeData> testAllTestsInDirectories(std::filesystem::path dir = "input", size_t testCnt = 1,
 	std::optional<std::reference_wrapper<std::ostream>> os = std::nullopt);
 
 void mergeOwn(std::vector<dataT>& a, std::vector<dataT>& b, std::vector<dataT>& c, size_t threads);

@@ -14,26 +14,29 @@ using namespace std;
 int main()
 {
     try {
-        tryCreateTestBlock(25, "small n ", 1, 1e2, "small n");
-        tryCreateTestBlock(50, "medium n ", 1e4, 1e5, "medium n");
-        tryCreateTestBlock(10, "large n ", 1e7, 1e8, "large n");
+        tryCreateTestBlock(15, "small n ", 1, 1e2, "small n");
+        tryCreateTestBlock(20, "medium n ", 1e4, 1e5, "medium n");
+        tryCreateTestBlock(5, "large n ", 1e7, 1e8, "large n");
 
-        tryCreateTestBlock(15, "repeated numbers small n ", 1e2, 1e3, "repeated numbers small n", 0, 1e2);
-        tryCreateTestBlock(15, "repeated numbers medium n ", 1e4, 1e5, "repeated numbers medium n", 0, 1e3);
-
+        tryCreateTestBlock(10, "repeated numbers small n ", 1e2, 1e3, "repeated numbers small n", 0, 1e2);
+        tryCreateTestBlock(10, "repeated numbers medium n ", 1e4, 1e5, "repeated numbers medium n", 0, 1e3);
+        
         unsigned int averageTestNumber = 3;
 
-        vector<timeData> ans;
+        map<string, timeData> ans;
         if(true)
             ans = testAllTestsInDirectories("input", averageTestNumber, cout);
         else
             ans = testAllTestsInDirectories("input", averageTestNumber);
 
         timeData res;
-        for (auto x : ans) res += x;
+        for (auto x : ans) res += x.second;
 
         cout << string(4, '\n');
-        cout << res.getTestBlock("TOTALE REZE") << endl;
+        for (auto x : ans)
+            cout << x.second.getTestBlock("DIRECTORY : " + x.first) << endl;
+        cout << string(4, '\n');
+        cout << res.getTestBlock("TOTALE REZE (NOT WEIGHTED)") << endl;
     }
     catch (exception e) {
         cout << e.what() << endl;
