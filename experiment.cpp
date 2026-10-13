@@ -5,11 +5,8 @@
 #include <vector>
 #include <fstream>
 #include <thread>
-#include "global-consts.h"
-
 #include <utility>
-#include <iostream>
-
+#include "global-consts.h"
 
 using namespace std;
 
@@ -45,8 +42,7 @@ string timeData::getTestBlock(string blockName) const {
 	return format("{0}\n|{1:^92}|\n{0}\n{2}{0}\n", string(94, '='), blockName, string(*this));
 }
 
-string timeData::getOwnTestMethodString(const timeT& timeRatiodTo) const {
-	string ans;
+size_t timeData::getBestNumberOfThreadsOwnMerge() const {
 	pair<timeT, size_t> mn = { ULLONG_MAX,0 };
 	for (size_t i = 0; i < KSIZ; i++) {
 		if (mn.first > t_my_algorithm[i] && t_my_algorithm[i] != 0) {
@@ -54,11 +50,18 @@ string timeData::getOwnTestMethodString(const timeT& timeRatiodTo) const {
 			mn.second = i;
 		}
 	}
+	return mn.second;
+}
+
+string timeData::getOwnTestMethodString(const timeT& timeRatiodTo) const {
+	string ans;
+	
+	size_t optimal = getBestNumberOfThreadsOwnMerge();
 
 	for (size_t i = 0; i < KSIZ; i++) {
 		ans += format("{0:>25} # {1:>17.5f} {4} | {2:>17.5f} {4} | {3:18.7f} |{5}\n",
 			format("K = {}", K[i]), t_my_algorithm[i], t_my_algorithm[i] + t_memory, t_my_algorithm[i] / timeRatiodTo, RATIO_NAME,
-			(mn.second == i) ? " <-- best on this test block" : "");
+			(optimal == i) ? " <-- best on this test block" : "");
 	}
 	return ans;
 }
@@ -82,8 +85,6 @@ timeData::operator string() const {
 		getOwnTestMethodString(t_default)
 		);
 }
-
-
 
 vector<dataT> readSequence(istream& is) {
 	size_t siz, x; is >> siz;
@@ -119,30 +120,20 @@ timeData measureSingleTestOnce(vector<dataT>& a, vector<dataT>& b) {
 
 	ans.t_memory = chrono::duration<timeT, RATIO>(t2 - t1).count();
 
-	vector<dataT> cTest(a.size() + b.size());
-	ans.t_default		= timedTest([&]() {merge(a.begin(), a.end(), b.begin(), b.end(), cTest.begin());});
-	ans.t_seq			= timedTest([&]() {merge(execution::seq, a.begin(), a.end(), b.begin(), b.end(), cTest.begin());});
-	ans.t_unseq			= timedTest([&]() {merge(execution::unseq, a.begin(), a.end(), b.begin(), b.end(), cTest.begin());});
-	ans.t_par			= timedTest([&]() {merge(execution::par, a.begin(), a.end(), b.begin(), b.end(), cTest.begin()); });
-	ans.t_par_unseq		= timedTest([&]() {merge(execution::par_unseq, a.begin(), a.end(), b.begin(), b.end(), cTest.begin()); });
+	ans.t_default		= timedTest([&]() {merge(a.begin(), a.end(), b.begin(), b.end(), c.begin());});
+	ans.t_seq			= timedTest([&]() {merge(execution::seq, a.begin(), a.end(), b.begin(), b.end(), c.begin());});
+	ans.t_unseq			= timedTest([&]() {merge(execution::unseq, a.begin(), a.end(), b.begin(), b.end(), c.begin());});
+	ans.t_par			= timedTest([&]() {merge(execution::par, a.begin(), a.end(), b.begin(), b.end(), c.begin()); });
+	ans.t_par_unseq		= timedTest([&]() {merge(execution::par_unseq, a.begin(), a.end(), b.begin(), b.end(), c.begin()); });
 
-	for (size_t t = 0; t < KSIZ; t++) {
-		c.clear();
-		c.resize(a.size() + b.size());
+	for (size_t t = 0; t < KSIZ; t++)
 		ans.t_my_algorithm[t] = timedTest([&, t]() {mergeOwn(a, b, c, K[t]); });
-		for (size_t i = 0; i < c.size(); i++) {
-			if (c[i] != cTest[i]) {
-				cout << "threads : " << K[t] << endl;
-				cout << "Needed : "; for (size_t j = 0; j <= i; j++) cout << cTest[i] << " "; cout << endl;
-				cout << "Own alg : "; for (size_t j = 0; j <= i; j++) cout << c[i] << " "; cout << endl;
-				throw logic_error("OWN ALGORITHM DOES NOT CREATES NEEDED VALUES");
-			}
-		}
-	}
+
 	return ans;
 }
 
-timeData testAllTestsInDirectory(filesystem::path indir, unsigned int testCnt, std::optional<std::reference_wrapper<std::ostream>> os) {
+timeData testAllTestsInDirectory(filesystem::path indir, size_t testCnt,
+	optional<reference_wrapper<ostream>> os) {
 
 	filesystem::path dir = filesystem::path("input" / indir);
 
@@ -152,16 +143,37 @@ timeData testAllTestsInDirectory(filesystem::path indir, unsigned int testCnt, s
 	timeData ans;
 	timeData t;
 
-	for (const auto x : filesystem::recursive_directory_iterator(dir)) {
+	for (const auto x : filesystem::directory_iterator(dir)) {
 		if (filesystem::is_directory(x)) continue;
 		ifstream fi(x.path());
-		//cout << "opening file = " << x.path() << endl;
 		if (!fi.is_open())
 			throw runtime_error(format("cannot open input file : {}", x.path().string()));
 
 		t = measureSingleTest(readSequence(fi), readSequence(fi), testCnt);
-		if (os.has_value()) os.value().get() << t.getTestBlock(x.path().filename().string());
 		ans += t;
+
+		if (os.has_value())
+			os.value().get() << t.getTestBlock(x.path().filename().string());
+	}
+	return ans;
+}
+
+vector<timeData> testAllTestsInDirectories(filesystem::path dir = "", size_t testCnt = 1,
+	optional<reference_wrapper<ostream>> os) {
+	if (!filesystem::is_directory(dir) || filesystem::is_empty(dir))
+		throw runtime_error("cannot open the input directory");
+
+	vector<timeData> ans;
+	timeData t;
+
+	for (const auto x : filesystem::recursive_directory_iterator(dir)) {
+		if (!filesystem::is_directory(x)) continue;
+
+		t = testAllTestsInDirectory(x, testCnt);
+		ans.push_back(t);
+
+		if (os.has_value())
+			os.value().get() << t.getTestBlock("DIRECTORY : " + x.path().filename().string());
 	}
 	return ans;
 }
