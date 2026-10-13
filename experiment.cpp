@@ -60,7 +60,8 @@ string timeData::getOwnTestMethodString(const timeT& timeRatiodTo) const {
 
 	for (size_t i = 0; i < KSIZ; i++) {
 		ans += format("{0:>25} # {1:>17.5f} {4} | {2:>17.5f} {4} | {3:18.7f} |{5}\n",
-			format("K = {}", K[i]), t_my_algorithm[i], t_my_algorithm[i] + t_memory, t_my_algorithm[i] / timeRatiodTo, RATIO_NAME,
+			format("K = {}", K[i]), t_my_algorithm[i], t_my_algorithm[i] + t_memory,
+			t_my_algorithm[i] / timeRatiodTo, RATIO_NAME,
 			(optimal == i) ? " <-- best on this test block" : "");
 	}
 	return ans;

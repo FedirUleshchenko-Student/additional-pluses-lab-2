@@ -22,7 +22,10 @@ struct timeData {
 
 	std::string getTestBlock(std::string blockName) const;
 
+	size_t getBestNumberOfThreadsOwnMerge() const;
+
 	operator std::string() const;
+
 private:
 	std::string getVanillaTestMethodString(const timeT &t, const timeT& timeRatiod, std::string&& message) const;
 	std::string getOwnTestMethodString(const timeT& timeRatiod) const;
@@ -35,6 +38,9 @@ timeT timedTest(std::function<void()> f);
 timeData measureSingleTest(std::vector<dataT>&& a, std::vector<dataT>&& b, int times);
 timeData measureSingleTestOnce(std::vector<dataT>& a, std::vector<dataT>& b);
 
-timeData testAllTestsInDirectory(std::filesystem::path indir = "", unsigned int testCnt = 1, std::optional<std::reference_wrapper<std::ostream>> os = std::nullopt);
+timeData testAllTestsInDirectory(std::filesystem::path indir = "", size_t testCnt = 1,
+	std::optional<std::reference_wrapper<std::ostream>> os = std::nullopt);
+std::vector<timeData> testAllTestsInDirectories(std::filesystem::path dir = "input", size_t testCnt = 1,
+	std::optional<std::reference_wrapper<std::ostream>> os = std::nullopt);
 
 void mergeOwn(std::vector<dataT>& a, std::vector<dataT>& b, std::vector<dataT>& c, size_t threads);
