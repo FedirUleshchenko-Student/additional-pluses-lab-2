@@ -159,7 +159,7 @@ timeData testAllTestsInDirectory(filesystem::path indir, size_t testCnt,
 	return ans;
 }
 
-vector<timeData> testAllTestsInDirectories(filesystem::path dir = "", size_t testCnt = 1,
+vector<timeData> testAllTestsInDirectories(filesystem::path dir, size_t testCnt,
 	optional<reference_wrapper<ostream>> os) {
 	if (!filesystem::is_directory(dir) || filesystem::is_empty(dir))
 		throw runtime_error("cannot open the input directory");
@@ -170,7 +170,7 @@ vector<timeData> testAllTestsInDirectories(filesystem::path dir = "", size_t tes
 	for (const auto x : filesystem::recursive_directory_iterator(dir)) {
 		if (!filesystem::is_directory(x)) continue;
 
-		t = testAllTestsInDirectory(x, testCnt);
+		t = testAllTestsInDirectory(x.path().filename().string(), testCnt);
 		ans.push_back(t);
 
 		if (os.has_value())
