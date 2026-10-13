@@ -7,15 +7,12 @@
 #include <thread>
 #include "global-consts.h"
 
-//#include <iostream>
+#include <iostream>
 
 
 using namespace std;
 
 timeData& timeData::operator+=(const timeData& o) {
-	if (t_my_algorithm.size() != o.t_my_algorithm.size())
-		throw invalid_argument("cannot use a += operator on diffenrent threads size");
-
 	for (size_t i = 0; i < t_my_algorithm.size(); i++)
 		t_my_algorithm[i] += o.t_my_algorithm[i];
 
@@ -121,19 +118,22 @@ timeData measureSingleTestOnce(vector<dataT>& a, vector<dataT>& b) {
 
 	ans.t_memory = chrono::duration<timeT, RATIO>(t2 - t1).count();
 
-	ans.t_default		= timedTest([&]() {merge(a.begin(), a.end(), b.begin(), b.end(), c.begin());});
-	ans.t_seq			= timedTest([&]() {merge(execution::seq, a.begin(), a.end(), b.begin(), b.end(), c.begin());});
-	ans.t_unseq			= timedTest([&]() {merge(execution::unseq, a.begin(), a.end(), b.begin(), b.end(), c.begin());});
-	ans.t_par			= timedTest([&]() {merge(execution::par, a.begin(), a.end(), b.begin(), b.end(), c.begin()); });
-	ans.t_par_unseq		= timedTest([&]() {merge(execution::par_unseq, a.begin(), a.end(), b.begin(), b.end(), c.begin()); });
-
 	vector<dataT> cTest(a.size() + b.size());
+	ans.t_default		= timedTest([&]() {merge(a.begin(), a.end(), b.begin(), b.end(), cTest.begin());});
+	ans.t_seq			= timedTest([&]() {merge(execution::seq, a.begin(), a.end(), b.begin(), b.end(), cTest.begin());});
+	ans.t_unseq			= timedTest([&]() {merge(execution::unseq, a.begin(), a.end(), b.begin(), b.end(), cTest.begin());});
+	ans.t_par			= timedTest([&]() {merge(execution::par, a.begin(), a.end(), b.begin(), b.end(), cTest.begin()); });
+	ans.t_par_unseq		= timedTest([&]() {merge(execution::par_unseq, a.begin(), a.end(), b.begin(), b.end(), cTest.begin()); });
+
 	for (size_t t = 0; t < KSIZ; t++) {
-		ans.t_my_algorithm[t] = timedTest([&, t]() {mergeOwn(a, b, cTest, K[t]); });
+		c.clear();
+		c.resize(a.size() + b.size());
+		ans.t_my_algorithm[t] = timedTest([&, t]() {mergeOwn(a, b, c, K[t]); });
 		for (size_t i = 0; i < c.size(); i++) {
 			if (c[i] != cTest[i]) {
-				//cout << "Needed : "; for (size_t j = 0; j <= i; j++) cout << c[i] << " "; cout << endl;
-				//cout << "Own alg : "; for (size_t j = 0; j <= i; j++) cout << cTest[i] << " "; cout << endl;
+				cout << "threads : " << K[t] << endl;
+				cout << "Needed : "; for (size_t j = 0; j <= i; j++) cout << cTest[i] << " "; cout << endl;
+				cout << "Own alg : "; for (size_t j = 0; j <= i; j++) cout << c[i] << " "; cout << endl;
 				throw logic_error("OWN ALGORITHM DOES NOT CREATES NEEDED VALUES");
 			}
 		}
@@ -167,21 +167,14 @@ timeData testAllTestsInDirectory(filesystem::path indir, unsigned int testCnt, s
 
 void mergeOwn(vector<dataT>& a, vector<dataT>& b, vector<dataT>& c, size_t threads) {
 	vector<jthread> tr(threads);
-	//bool aSmBlk = a.size() % threads;
-	//bool bSmBlk = b.size() % threads;
 	size_t aBlkSiz = a.size() / threads + (a.size() % threads != 0);
 	size_t bBlkSiz = b.size() / threads + (b.size() % threads != 0);
 
-	vector<pair<size_t, size_t>> ptr(threads);
+	vector<pair<size_t, size_t>> blockLimits(threads);
+	for (size_t i = 0; i < threads; i++)
+		blockLimits[i] = { i * (aBlkSiz + bBlkSiz) , (i + 1) * (aBlkSiz + bBlkSiz) };
+	blockLimits[threads - 1].second = min(blockLimits[threads - 1].second, c.size());
 
-
-	for (size_t i = 0; i < threads; i++) {
-		ptr[i] = { i * (aBlkSiz + bBlkSiz) , (i + 1) * (aBlkSiz + bBlkSiz) };
-	}
-	ptr[threads - 1].second = min(ptr[threads - 1].second, c.size());
-
-	// WHY NOT WORK
-	// THROWS VECTOR INVALID ARGUMENT
 	for (size_t i = 0; i < threads; i++) {
 		tr[i] = jthread(
 			[&, i]() { merge(
@@ -189,7 +182,7 @@ void mergeOwn(vector<dataT>& a, vector<dataT>& b, vector<dataT>& c, size_t threa
 				a.begin() + ((i + 1 == threads) ? a.size() : ((i + 1) * aBlkSiz)),
 				b.begin() + i * bBlkSiz,
 				b.begin() + ((i + 1 == threads) ? b.size() : ((i + 1) * bBlkSiz)),
-				c.begin() + ptr[i].first); });
+				c.begin() + blockLimits[i].first); });
 	}
 
 	tr.clear();
@@ -199,94 +192,32 @@ void mergeOwn(vector<dataT>& a, vector<dataT>& b, vector<dataT>& c, size_t threa
 	vector<dataT>& fromP = c;
 	vector<dataT>& toP = temp;
 	size_t lastsiz;
-	while (ptr.size() > 1) {
+	bool startOffset;
+	while (blockLimits.size() > 1) {
 		lastsiz = 0;
-		for (size_t i = 0; i < ptr.size(); i++) {
-			merge(fromP.begin() + ptr[i].first, fromP.begin() + ptr[i].second,
-				fromP.begin() + ptr[i + 1].first, fromP.begin() + ptr[i + 1].second,
+		startOffset = blockLimits.size() % 2;
+		for (size_t i = 0; i < blockLimits.size() - startOffset; i++) {
+			merge(fromP.begin() + blockLimits[i].first, fromP.begin() + blockLimits[i].second,
+				fromP.begin() + blockLimits[i + 1].first, fromP.begin() + blockLimits[i + 1].second,
 				toP.begin() + lastsiz
 			);
 
-			ptr[i].second = ptr[i + 1].second;
-			lastsiz += (ptr[i].second - ptr[i].first);
-			ptr.erase(ptr.begin() + i + 1);
+			blockLimits[i].second = blockLimits[i + 1].second;
+			lastsiz += (blockLimits[i].second - blockLimits[i].first);
+			blockLimits.erase(blockLimits.begin() + i + 1);
 		}
+
+		if (startOffset)
+			copy(fromP.begin() + blockLimits.back().first,
+				fromP.begin() + blockLimits.back().second,
+				toP.begin() + lastsiz);
+
 		swap(fromP, toP);
 	}
 
-	if (&fromP != &c) swap(temp, c);
+	if (&fromP != &c)
+		swap(temp, c);
+
+	//if(!c.empty())
+	//	c.pop_back();
 }
-
-/*
-pair<vector<dataT>::iterator, vector<dataT>::iterator> binarySearch(
-	vector<dataT>::const_iterator fa, size_t siza,
-	vector<dataT>::const_iterator fb, vector<dataT>::const_iterator eb, size_t needed) {
-	size_t l = 0, r = siza;
-	size_t t;
-	while (l + 1 < r) {
-		t = (l + r) / 2;
-		if(t + (upper_bound(fb, eb, fa + t) - fb) < needed)
-			t + 
-	}
-
-	return make_pair( static_cast<vector<dataT>::iterator>((fa + l)),upper_bound(fb, eb, fa + l) );
-}
-
-void mergeSort(vector<dataT>& a, vector<dataT>& b, vector<dataT>& c, size_t threads = K) {
-	vector<vector<dataT>::iterator> va(threads);
-	vector<vector<dataT>::iterator> vb(threads);
-
-	for (size_t i = 0; i < K; i++) {
-		auto x = binarySearch(a.begin())
-	}
-	
-
-	thread tr[K];
-}
-*/
-
-/*
-void binSearch() {
-
-}
-
-vector<dataT>::iterator mergeSmart(
-	vector<dataT>::const_iterator first1, vector<dataT>::const_iterator last1,
-	vector<dataT>::const_iterator first2, vector<dataT>::const_iterator last2,
-	vector<dataT>::iterator d_first) {
-
-	jthread tr[K];
-
-	size_t cnt = (last1 - first1) / K;
-	for (size_t i = 1; i <= cnt * K; i++) {
-		upper_bound(first2, last2, *(first1 + K - 1));
-		auto t = upper_bound(first2, last2, *(first1 + K - 1));
-
-		tr[i - 1] = jthread(merge(first1, first1 + K - 1, first2, t, d_first));
-
-		d_first += K + (t - first2);
-		first1 += K;
-	}
-
-	for_each(tr, tr + K, [](jthread& t) { t.join(); });
-
-	return std::copy(first2, last2, d_first);
-}
-*/
-
-
-//// https://stackoverflow.com/questions/52975114/different-execution-policies-at-runtime
-//enum Policy { seq, par, par_unseq };
-//template<class F>
-//auto maybe_parallel(F f, Policy p) {
-//	switch (p) {
-//	case seq: return f(std::execution::seq);
-//	case par: return f(std::execution::par);
-//	default: return f(std::execution::par_unseq);
-//	}
-//}
-//auto f2(const std::vector<std::string>& vec,
-//	const std::string& elem, Policy p) {
-//	return maybe_parallel
-//	([&](auto& pol) {return std::find(pol, vec.begin(), vec.end(), elem); }, p);
-//}

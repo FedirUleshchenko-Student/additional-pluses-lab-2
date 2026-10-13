@@ -18,7 +18,6 @@ struct timeData {
 	std::vector<timeT> t_my_algorithm = std::vector<timeT>( KSIZ, 0 );
 
 	timeData& operator+=(const timeData& o);
-
 	timeData& operator/=(const timeT& cnt);
 
 	std::string getTestBlock(std::string blockName) const;
@@ -39,8 +38,3 @@ timeData measureSingleTestOnce(std::vector<dataT>& a, std::vector<dataT>& b);
 timeData testAllTestsInDirectory(std::filesystem::path indir = "", unsigned int testCnt = 1, std::optional<std::reference_wrapper<std::ostream>> os = std::nullopt);
 
 void mergeOwn(std::vector<dataT>& a, std::vector<dataT>& b, std::vector<dataT>& c, size_t threads);
-
-//std::vector<dataT>::iterator mergeSmart(
-//	std::vector<dataT>::const_iterator first1, std::vector<dataT>::const_iterator last1,
-//	std::vector<dataT>::const_iterator first2, std::vector<dataT>::const_iterator last2,
-//	std::vector<dataT>::iterator d_first);
