@@ -113,6 +113,8 @@ timeData measureSingleTest(vector<dataT>&& a, vector<dataT>&& b, int times) {
 	return ans;
 }
 
+#include <iostream>
+
 timeData measureSingleTestOnce(vector<dataT>& a, vector<dataT>& b) {
 	auto t1 = chrono::steady_clock::now();
 	vector<dataT> c(a.size() + b.size());
@@ -129,6 +131,18 @@ timeData measureSingleTestOnce(vector<dataT>& a, vector<dataT>& b) {
 
 	for (size_t t = 0; t < KSIZ; t++)
 		ans.t_my_algorithm[t] = timedTest([&, t]() {mergeOwn(a, b, c, K[t]); });
+
+	//vector<dataT> cTest(a.size() + b.size());
+	//for (size_t t = 0; t < KSIZ; t++) {
+	//	ans.t_my_algorithm[t] = timedTest([&, t]() {mergeOwn(a, b, cTest, K[t]); });
+	//	for (size_t i = 0; i < c.size(); i++) {
+	//		if (c[i] != cTest[i]) {
+	//			cout << "Needed : "; for (size_t j = 0; j <= i; j++) cout << c[i] << " "; cout << endl;
+	//			cout << "Own alg : "; for (size_t j = 0; j <= i; j++) cout << cTest[i] << " "; cout << endl;
+	//			throw logic_error("OWN ALGORITHM DOES NOT CREATES NEEDED VALUES");
+	//		}
+	//	}
+	//}
 
 	return ans;
 }
@@ -181,6 +195,7 @@ map<string, timeData> testAllTestsInDirectories(filesystem::path dir, size_t tes
 
 void mergeOwn(vector<dataT>& a, vector<dataT>& b, vector<dataT>& c, size_t threads) {
 	vector<jthread> tr(threads);
+
 	size_t aBlkSiz = a.size() / threads + (a.size() % threads != 0);
 	size_t bBlkSiz = b.size() / threads + (b.size() % threads != 0);
 
@@ -194,11 +209,11 @@ void mergeOwn(vector<dataT>& a, vector<dataT>& b, vector<dataT>& c, size_t threa
 
 		blockLimits[i] = { a_start + b_start, a_end + b_end };
 
-		tr[i] = jthread(
-			[&, i]() { merge(
-					a.begin() + a_start, a.begin() + a_end,
-					b.begin() + b_start, b.begin() + b_end,
-					c.begin() + blockLimits[i].first); });
+		tr[i] = jthread([&, a_start, a_end, b_start, b_end, i]() {
+			merge(a.begin() + a_start, a.begin() + a_end,
+				b.begin() + b_start, b.begin() + b_end,
+				c.begin() + blockLimits[i].first);
+			});
 	}
 
 	tr.clear();
@@ -207,29 +222,56 @@ void mergeOwn(vector<dataT>& a, vector<dataT>& b, vector<dataT>& c, size_t threa
 
 	vector<dataT>* fromP = &c;
 	vector<dataT>* toP = &temp;
-	size_t lastsiz;
-	bool startOffset;
-	while (blockLimits.size() > 1) {
-		lastsiz = 0;
-		startOffset = blockLimits.size() % 2;
-		for (size_t i = 0; i < blockLimits.size() - startOffset; i++) {
-			merge(fromP->begin() + blockLimits[i].first, fromP->begin() + blockLimits[i].second,
-				fromP->begin() + blockLimits[i + 1].first, fromP->begin() + blockLimits[i + 1].second,
-				toP->begin() + lastsiz
-			);
 
+	while (blockLimits.size() > 1) {
+		size_t lastsiz = 0;
+		bool startOffset = blockLimits.size() % 2;
+
+		for (size_t i = 0; i < blockLimits.size() - startOffset; i++) {
+			// Local iterators for every block
+			auto b1_first = fromP->begin() + blockLimits[i].first;
+			auto b1_last = fromP->begin() + blockLimits[i].second;
+			auto b2_first = fromP->begin() + blockLimits[i + 1].first;
+			auto b2_last = fromP->begin() + blockLimits[i + 1].second;
+
+			auto out_first = toP->begin() + lastsiz;
+
+			// Crash blocker
+			if (b1_first == b1_last || b2_first == b2_last) {
+				auto out_mid = copy(b1_first, b1_last, out_first);
+				copy(b2_first, b2_last, out_mid);
+			}
+			else {
+				// Cutting edges so less merges
+				auto t1 = lower_bound(b1_first, b1_last, *b2_first);
+				auto t2 = upper_bound(b2_first, b2_last, *(b1_last - 1));
+
+				// Optimal merge positions
+				auto out_mid1 = copy(b1_first, t1, out_first);
+				auto out_mid2 = merge(t1, b1_last, b2_first, t2, out_mid1);
+
+				// Copy right edge of second block (they all are bigger than all 1 block)
+				copy(t2, b2_last, out_mid2);
+			}
+
+			// Updating data
 			blockLimits[i].second = blockLimits[i + 1].second;
 			lastsiz += (blockLimits[i].second - blockLimits[i].first);
 			blockLimits.erase(blockLimits.begin() + i + 1);
 		}
 
-		if (startOffset)
+		// If odd - copy at the end
+		if (startOffset) {
 			copy(fromP->begin() + blockLimits.back().first,
 				fromP->begin() + blockLimits.back().second,
 				toP->begin() + lastsiz);
+		}
 
+		// Ping-Pong
 		swap(fromP, toP);
 	}
 
-	if (fromP != &c) c = move(temp);
+	if (fromP != &c) {
+		c = std::move(temp);
+	}
 }
